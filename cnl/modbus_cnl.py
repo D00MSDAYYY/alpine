@@ -293,7 +293,6 @@ class ModbusChannel(_Channel):
             print(
                 f"{self.settings.name} запущен (опрос в отдельном потоке, {cfg.polling_interval_msec} мс)"
             )
-            print(f"  Поток приоритет: {self._polling_thread.priority()}")
 
         except Exception as e:
             print(f"{self.settings.name} ошибка запуска: {e}")

@@ -27,7 +27,7 @@ class SineWorker(QObject):
             # Генерация синуса
             value = math.sin(angle)
             record = {
-                "timestamp": datetime.now(),
+                "timestamp": datetime.now().timestamp(),
                 "value": value,
             }
             self.data_ready.emit(record)

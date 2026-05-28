@@ -1,13 +1,13 @@
 import gc
 import json
-import time
 from typing import List
 from datetime import datetime, timedelta
 
-import pyqtgraph as pg
+import numpy as np
+from aux.vispy_plot_widget import VispyPlot
 from pydantic import BaseModel, Field
 from PySide6.QtGui import QFont
-from PySide6.QtCore import Qt, Signal, QThreadPool, QRunnable, QThread, QTimer, QEvent
+from PySide6.QtCore import Qt, Signal, QThreadPool, QRunnable, QThread, QTimer
 from PySide6.QtWidgets import QToolBar, QMainWindow, QDialog, QSplitter
 
 
@@ -15,8 +15,6 @@ from conf.conf_dialog import ConfiguratorDialog
 from conf.alpine_conf import AlpineConfigurator
 from cnl.cnl import _ChannelSettings
 from cnl.cnl_maker import ChannelMaker
-from aux.events import ClickEvent
-from aux.gui.widgets.time_axis import TimeAxisItem
 from aux.gui.widgets.legend import LegendWidget
 from aux.gui.widgets.opener_dialog import OpenerDialog
 from aux.gui.widgets.searchable_list import SearchableListView
@@ -27,19 +25,6 @@ from aux.gui.settings_decorators import (
     settings_with_signals,
     get_saving_trigger,
 )
-
-# TRY_USING_OPENGL = True
-# if TRY_USING_OPENGL:
-#     try:
-#         import OpenGL.GL as gl  # pylint: disable=unused-import
-#     except:  # pylint: disable=bare-except
-#         print("OpenGL acceleration: Disabled")
-#         print("To install: `conda install pyopengl` or `pip install pyopengl`")
-#     else:
-#         print("OpenGL acceleration: Enabled")
-#         pg.setConfigOptions(useOpenGL=True)
-#         pg.setConfigOptions(antialias=True)
-#         pg.setConfigOptions(enableExperimental=True)
 
 
 class _AlpineSettings(BaseModel):
@@ -57,6 +42,8 @@ AlpineSettings = settings_with_signals(_AlpineSettings)
 
 
 class _FilterDataTask(QRunnable):
+    coool = Signal()
+
     def __init__(self, alpine, cnl, from_dt, to_dt, callback):
         super().__init__()
         self.alpine = alpine
@@ -65,7 +52,6 @@ class _FilterDataTask(QRunnable):
         self.to_dt = to_dt
         self.callback = callback
 
-    # @profile
     def run(self):
         current_thread = QThread.currentThread()
         current_thread.setPriority(QThread.Priority.LowestPriority)
@@ -77,12 +63,17 @@ class _FilterDataTask(QRunnable):
         del self.cnl.data
         self.cnl.data = filtered_data
 
-        x = [d["timestamp"] for d in filtered_data]
-        y = [d["value"] for d in filtered_data]
+        if filtered_data:
+            to_ts = self.to_dt.timestamp()
 
-        if self.alpine.input_flag:
-            return
-        self.callback(self.cnl, x, y)
+            pos = np.array(
+                [[d["timestamp"] - to_ts, d["value"]] for d in filtered_data],
+                dtype=np.float32,
+            )
+        else:
+            pos = np.empty((0, 2), dtype=np.float32)
+
+        self.callback(self.cnl, pos)
 
 
 @with_settings_property()
@@ -92,7 +83,7 @@ class Alpine(QMainWindow):
     cnl_deleted_with_sett = Signal(object)
 
     settings_created = Signal(object)
-    _filtered_data_ready = Signal(object, list, list)  # cnl, [x], [y]
+    _filtered_data_ready = Signal(object, object)  # cnl, [[x,y]]
 
     def __init__(self, sett_path):
         super().__init__()
@@ -102,9 +93,7 @@ class Alpine(QMainWindow):
         self._setup_gc_timer()
 
         self.time_range = self.settings.time_range
-
         self.stop_flag = False
-        self.input_flag = False
 
         # TODO this violates DI principles but ok for now
         self.cnl_maker = ChannelMaker(self)
@@ -124,18 +113,8 @@ class Alpine(QMainWindow):
     def add_cnl(self, cnl):
         self.legend.add_cnl(cnl)
 
-        curve = self.plot_widget.plot(
-            [],
-            [],
-            pen=pg.mkPen(
-                color=cnl.settings.appearence.line_color.name.lower(),
-                width=cnl.settings.appearence.line_width,
-                # symbol="o",
-                # symbolSize=5,
-                # symbolBrush="w",
-            ),
-            name=cnl.settings.name,
-        )
+        pen = VispyPlot.Pen(color=cnl.settings.appearence.line_color.name.lower())
+        curve = self.plot_widget.plotCurve(dots_coords=[(0, 0)], pen=pen)
         self.cnl_to_curve[cnl] = curve
 
         cnl.close_requested.connect(self.remove_cnl)
@@ -161,7 +140,7 @@ class Alpine(QMainWindow):
 
     def remove_cnl(self, cnl):
         if curve := self.cnl_to_curve.pop(cnl, None):
-            self.plot_widget.removeItem(curve)
+            self.plot_widget.removeCurve(curve)
         self.legend.remove_cnl(cnl)
         cnl.stop()
         cnl.deleteLater()
@@ -211,8 +190,6 @@ class Alpine(QMainWindow):
             get_saving_trigger().triggered.connect(
                 self._save_all_settings, self.Qt_DirConn
             )
-            self.settings.x_axis_label_changed.connect(self._update_axis_labels, self.Qt_DirConn)  # type: ignore
-            self.settings.y_axis_label_changed.connect(self._update_axis_labels, self.Qt_DirConn)  # type: ignore
             self.settings.time_range_changed.connect(self._on_time_range_changed, self.Qt_DirConn)  # type: ignore
 
             self.settings_created.emit(self.settings)
@@ -226,12 +203,12 @@ class Alpine(QMainWindow):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        plot_widget = pg.PlotWidget(axisItems={"bottom": TimeAxisItem()})
+        plot_widget = VispyPlot()
         # plot_widget = pg.PlotWidget()
         self.plot_widget = plot_widget
-        plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        plot_widget.setLabel("left", self.settings.y_axis_label)
-        plot_widget.setLabel("bottom", self.settings.x_axis_label)
+        # plot_widget.showGrid(x_flag=True, y_flag=True, alpha=0.3)
+        # plot_widget.setLabel("left", self.settings.y_axis_label)
+        # plot_widget.setLabel("bottom", self.settings.x_axis_label)
 
         self.legend = LegendWidget()
 
@@ -284,13 +261,7 @@ class Alpine(QMainWindow):
     def _update_curve_style(self, cnl):
         if curve := self.cnl_to_curve.get(cnl):
             color = cnl.settings.appearence.line_color.name.lower()
-            width = cnl.settings.appearence.line_width
-            style = getattr(Qt.PenStyle, cnl.settings.appearence.line_shape.value)
-            curve.setPen(pg.mkPen(color=color, width=width, style=style))
-
-    def _update_axis_labels(self):
-        self.plot_widget.setLabel("bottom", self.settings.x_axis_label)
-        self.plot_widget.setLabel("left", self.settings.y_axis_label)
+            curve.setColor(color=color)
 
     def _on_time_range_changed(self, value):
         self.time_range = value
@@ -308,7 +279,6 @@ class Alpine(QMainWindow):
     def _on_stats_timer(self):
         if self._redraw_plot_count > 0:
             self._redraw_plot_hz = self._redraw_plot_count / 1.0  # за секунду
-            print(f"📊 Герцовка отрисовки графика: {self._redraw_plot_hz:.1f} FPS")
         else:
             self._redraw_plot_hz = 0.0
         self._redraw_plot_count = 0  # сброс счётчика
@@ -322,10 +292,8 @@ class Alpine(QMainWindow):
     #    misc (but most intensitive) callbacks    #
     #                                             #
     ###############################################
-    def _on_data_filtered(self, cnl, x, y):
-        if self.input_flag:
-            return
-        self._filtered_data_ready.emit(cnl, x, y)
+    def _on_data_filtered(self, cnl, pos):
+        self._filtered_data_ready.emit(cnl, pos)
 
     def _on_cnl_updated(self, cnl):
         to_dt = datetime.now()
@@ -334,20 +302,12 @@ class Alpine(QMainWindow):
         task = _FilterDataTask(self, cnl, from_dt, to_dt, self._on_data_filtered)
         self._threadpool.start(task, priority=0)
 
-    def _redraw_plot(self, cnl, x, y):
-        if self.stop_flag or self.input_flag:
+    def _redraw_plot(self, cnl, pos):
+        if self.stop_flag:
             return
         if curve := self.cnl_to_curve.get(cnl):
-            curve.setData(x, y)
+            curve.setData(pos)
             self.plot_widget.autoRange()
             self._redraw_plot_count += 1
-
-    # def event(self, event):
-    #     if event.type() == QEvent.Type.MouseButtonPress:
-    #         print("click2")
-    #         if event.button() == Qt.MouseButton.LeftButton:
-    #             # self.stop_flag = not self.stop_flag
-    #             return True
-    #     return super().event(event)
 
     Qt_DirConn = Qt.ConnectionType.DirectConnection
