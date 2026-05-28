@@ -1,5 +1,5 @@
 {
-  "time_range": "PT3M30S",
+  "time_range": "PT10S",
   "x_axis_label": "x",
   "y_axis_label": "y",
   "cnls_setts": [
@@ -9,7 +9,7 @@
       "units": "A",
       "appearence": {
         "line_width": 3.0,
-        "line_color": "brown",
+        "line_color": "purple",
         "line_shape": "DashDotDotLine"
       },
       "setup_config": {
@@ -26,7 +26,7 @@
       "units": "A",
       "appearence": {
         "line_width": 1.0,
-        "line_color": "orange",
+        "line_color": "cyan",
         "line_shape": "DotLine"
       },
       "setup_config": {

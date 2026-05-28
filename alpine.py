@@ -4,17 +4,16 @@ from typing import List
 from datetime import datetime, timedelta
 
 import numpy as np
-from aux.vispy_plot_widget import VispyPlot
 from pydantic import BaseModel, Field
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, Signal, QThreadPool, QRunnable, QThread, QTimer
 from PySide6.QtWidgets import QToolBar, QMainWindow, QDialog, QSplitter
 
-
 from conf.conf_dialog import ConfiguratorDialog
 from conf.alpine_conf import AlpineConfigurator
 from cnl.cnl import _ChannelSettings
 from cnl.cnl_maker import ChannelMaker
+from aux.vispy_plot_widget import VispyPlot
 from aux.gui.widgets.legend import LegendWidget
 from aux.gui.widgets.opener_dialog import OpenerDialog
 from aux.gui.widgets.searchable_list import SearchableListView
@@ -42,8 +41,6 @@ AlpineSettings = settings_with_signals(_AlpineSettings)
 
 
 class _FilterDataTask(QRunnable):
-    coool = Signal()
-
     def __init__(self, alpine, cnl, from_dt, to_dt, callback):
         super().__init__()
         self.alpine = alpine
@@ -53,9 +50,6 @@ class _FilterDataTask(QRunnable):
         self.callback = callback
 
     def run(self):
-        current_thread = QThread.currentThread()
-        current_thread.setPriority(QThread.Priority.LowestPriority)
-
         filtered_data = data_filter_with_binary_search(
             self.cnl.data, self.from_dt, self.to_dt
         )
@@ -83,7 +77,6 @@ class Alpine(QMainWindow):
     cnl_deleted_with_sett = Signal(object)
 
     settings_created = Signal(object)
-    _filtered_data_ready = Signal(object, object)  # cnl, [[x,y]]
 
     def __init__(self, sett_path):
         super().__init__()
@@ -101,10 +94,6 @@ class Alpine(QMainWindow):
 
         self._threadpool = QThreadPool.globalInstance()
 
-        self._filtered_data_ready.connect(
-            self._redraw_plot, Qt.ConnectionType.QueuedConnection
-        )
-
     ###################
     #                 #
     #    interface    #
@@ -114,7 +103,13 @@ class Alpine(QMainWindow):
         self.legend.add_cnl(cnl)
 
         pen = VispyPlot.Pen(color=cnl.settings.appearence.line_color.name.lower())
-        curve = self.plot_widget.plotCurve(dots_coords=[(0, 0)], pen=pen)
+        curve = self.plot_widget.plotCurve(
+            dots_coords=np.array(
+                np.empty((0, 2), dtype=np.float32),
+                np.empty((0, 2), dtype=np.float32),
+            ),
+            pen=pen,
+        )
         self.cnl_to_curve[cnl] = curve
 
         cnl.close_requested.connect(self.remove_cnl)
@@ -293,7 +288,7 @@ class Alpine(QMainWindow):
     #                                             #
     ###############################################
     def _on_data_filtered(self, cnl, pos):
-        self._filtered_data_ready.emit(cnl, pos)
+        self._redraw_plot(cnl, pos)
 
     def _on_cnl_updated(self, cnl):
         to_dt = datetime.now()
