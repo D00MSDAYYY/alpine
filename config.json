@@ -1,5 +1,5 @@
 {
-  "time_range": "PT10S",
+  "time_range": "PT11S",
   "x_axis_label": "x",
   "y_axis_label": "y",
   "cnls_setts": [
@@ -8,9 +8,8 @@
       "name": "cnl1",
       "units": "A",
       "appearence": {
-        "line_width": 3.0,
-        "line_color": "purple",
-        "line_shape": "DashDotDotLine"
+        "line_width": 1.0,
+        "line_color": "cornsilk"
       },
       "setup_config": {
         "host": "127.0.0.1",
@@ -26,8 +25,7 @@
       "units": "A",
       "appearence": {
         "line_width": 1.0,
-        "line_color": "cyan",
-        "line_shape": "DotLine"
+        "line_color": "cyan"
       },
       "setup_config": {
         "host": "127.0.0.1",
@@ -43,8 +41,7 @@
       "units": null,
       "appearence": {
         "line_width": 1.0,
-        "line_color": "pink",
-        "line_shape": "SolidLine"
+        "line_color": "white"
       },
       "setup_config": {
         "polling_interval_msec": 5
@@ -56,8 +53,7 @@
       "units": "float",
       "appearence": {
         "line_width": 2.0,
-        "line_color": "yellow",
-        "line_shape": "DashLine"
+        "line_color": "yellow"
       },
       "setup_config": {
         "host": "45.8.248.56",
@@ -77,8 +73,7 @@
       "units": "float",
       "appearence": {
         "line_width": 2.0,
-        "line_color": "purple",
-        "line_shape": "DotLine"
+        "line_color": "purple"
       },
       "setup_config": {
         "host": "10.10.9.101",
@@ -98,8 +93,7 @@
       "units": "A",
       "appearence": {
         "line_width": 3.0,
-        "line_color": "green",
-        "line_shape": "SolidLine"
+        "line_color": "green"
       },
       "setup_config": {
         "host": "10.10.0.34",

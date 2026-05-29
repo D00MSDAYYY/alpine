@@ -1,8 +1,9 @@
 from typing import Literal
 
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, field_validator
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QLabel, QDialog, QHBoxLayout, QPushButton
+from vispy.color import Color
 
 from aux.gui.handy_enums import *
 from aux.gui.polymorphic_field_handlers import PolymorphicBase
@@ -14,9 +15,7 @@ from conf.appearance_conf import AppearenceConfigurator
 
 class _Appearence(BaseModel):
     line_width: float = Field(default=1.0)
-    line_color: LineColor = Field(default_factory=random_line_color)
-    line_shape: LineShape = Field(default=LineShape.SolidLine)
-
+    line_color: LineColor = Field(default_factory=random_line_color) # type: ignore
 
 Appearence = settings_with_signals(_Appearence)
 
@@ -89,8 +88,8 @@ class _Channel(QWidget):
         main_layout.addWidget(close_btn)
 
     def _update_color_indicator(self):
-        color_name = self.settings.appearence.line_color.name.lower()
-        self.color_wgt.setStyleSheet(f"background-color: {color_name};")
+        color_name = self.settings.appearence.line_color.value
+        self.color_wgt.setStyleSheet(f"background-color: {Color(color_name).hex};")
 
     def _connect_signals(self):
         self.close_btn.clicked.connect(lambda flag: self._btn_close_clicked())

@@ -67,7 +67,7 @@ class _FilterDataTask(QRunnable):
         else:
             pos = np.empty((0, 2), dtype=np.float32)
 
-        self.callback(self.cnl, pos)
+        self.callback(self.cnl, pos, self.to_dt)
 
 
 @with_settings_property()
@@ -102,12 +102,12 @@ class Alpine(QMainWindow):
     def add_cnl(self, cnl):
         self.legend.add_cnl(cnl)
 
-        pen = VispyPlot.Pen(color=cnl.settings.appearence.line_color.name.lower())
+        pen = VispyPlot.Pen(
+            color=cnl.settings.appearence.line_color.value,
+            width=cnl.settings.appearence.line_width,
+        )
         curve = self.plot_widget.plotCurve(
-            dots_coords=np.array(
-                np.empty((0, 2), dtype=np.float32),
-                np.empty((0, 2), dtype=np.float32),
-            ),
+            dots_coords=np.array([[0, 0], [0, 0]], dtype=np.float32),
             pen=pen,
         )
         self.cnl_to_curve[cnl] = curve
@@ -121,10 +121,6 @@ class Alpine(QMainWindow):
         )
         cnl.settings.appearence.line_width_changed.connect(
             lambda width, cnl=cnl: self._update_curve_style(cnl),
-            self.Qt_DirConn,
-        )
-        cnl.settings.appearence.line_shape_changed.connect(
-            lambda shape, cnl=cnl: self._update_curve_style(cnl),
             self.Qt_DirConn,
         )
         try:
@@ -185,7 +181,18 @@ class Alpine(QMainWindow):
             get_saving_trigger().triggered.connect(
                 self._save_all_settings, self.Qt_DirConn
             )
-            self.settings.time_range_changed.connect(self._on_time_range_changed, self.Qt_DirConn)  # type: ignore
+            self.settings.time_range_changed.connect(
+                self._on_time_range_changed,
+                self.Qt_DirConn,
+            )  # type: ignore
+            self.settings.x_axis_label_changed.connect(
+                self._on_x_axis_label_changed,
+                self.Qt_DirConn,
+            )  # type: ignore
+            self.settings.y_axis_label_changed.connect(
+                self._on_y_axis_label_changed,
+                self.Qt_DirConn,
+            )  # type: ignore
 
             self.settings_created.emit(self.settings)
         except Exception as e:
@@ -201,6 +208,10 @@ class Alpine(QMainWindow):
         plot_widget = VispyPlot()
         # plot_widget = pg.PlotWidget()
         self.plot_widget = plot_widget
+        plot_widget.set_axis_labels(
+            self.settings.x_axis_label,
+            self.settings.y_axis_label,
+        )
         # plot_widget.showGrid(x_flag=True, y_flag=True, alpha=0.3)
         # plot_widget.setLabel("left", self.settings.y_axis_label)
         # plot_widget.setLabel("bottom", self.settings.x_axis_label)
@@ -255,11 +266,19 @@ class Alpine(QMainWindow):
     ############################
     def _update_curve_style(self, cnl):
         if curve := self.cnl_to_curve.get(cnl):
-            color = cnl.settings.appearence.line_color.name.lower()
+            color = cnl.settings.appearence.line_color.value
+            width = cnl.settings.appearence.line_width
             curve.setColor(color=color)
+            curve.setWidth(width=width)
 
     def _on_time_range_changed(self, value):
         self.time_range = value
+
+    def _on_x_axis_label_changed(self, value):
+        self.plot_widget.set_x_axis_label(value)
+
+    def _on_y_axis_label_changed(self, value):
+        self.plot_widget.set_y_axis_label(value)
 
     def _save_all_settings(self):
         with open(self.settings_path, "w") as f:
@@ -287,8 +306,8 @@ class Alpine(QMainWindow):
     #    misc (but most intensitive) callbacks    #
     #                                             #
     ###############################################
-    def _on_data_filtered(self, cnl, pos):
-        self._redraw_plot(cnl, pos)
+    def _on_data_filtered(self, cnl, pos, to_dt):
+        self._redraw_plot(cnl, pos, to_dt)
 
     def _on_cnl_updated(self, cnl):
         to_dt = datetime.now()
@@ -297,10 +316,11 @@ class Alpine(QMainWindow):
         task = _FilterDataTask(self, cnl, from_dt, to_dt, self._on_data_filtered)
         self._threadpool.start(task, priority=0)
 
-    def _redraw_plot(self, cnl, pos):
+    def _redraw_plot(self, cnl, pos, to_dt):
         if self.stop_flag:
             return
         if curve := self.cnl_to_curve.get(cnl):
+            self.plot_widget.set_x_axis_time_reference(to_dt)
             curve.setData(pos)
             self.plot_widget.autoRange()
             self._redraw_plot_count += 1
